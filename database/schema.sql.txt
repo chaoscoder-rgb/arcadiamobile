@@ -1,0 +1,274 @@
+-- =========================================
+-- Arcadia Mobile - PostgreSQL Schema
+-- =========================================
+
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- ============ ENUM TYPES ============
+
+CREATE TYPE user_role AS ENUM ('ADMIN', 'SITE_ENGINEER', 'SUPERVISOR', 'SECURITY');
+CREATE TYPE project_phase AS ENUM ('FOUNDATION', 'FRAMING', 'FINISHING', 'OTHER');
+CREATE TYPE order_status AS ENUM ('DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'REJECTED', 'ORDERED', 'PARTIALLY_RECEIVED', 'COMPLETED', 'CANCELLED');
+CREATE TYPE approval_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED');
+CREATE TYPE receipt_status AS ENUM ('PENDING', 'VERIFIED', 'DISCREPANCY', 'CLOSED');
+CREATE TYPE notification_type AS ENUM ('INFO', 'WARNING', 'ALERT', 'APPROVAL_REQUEST', 'APPROVAL_RESULT');
+CREATE TYPE notification_status AS ENUM ('UNREAD', 'READ');
+CREATE TYPE audit_action AS ENUM ('INSERT', 'UPDATE', 'DELETE');
+CREATE TYPE budget_alert_level AS ENUM ('NONE', 'WARNING', 'CRITICAL');
+
+-- ============ CORE TABLES ============
+
+CREATE TABLE users (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    username        VARCHAR(50) NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    full_name       VARCHAR(150) NOT NULL,
+    role            user_role NOT NULL,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ
+);
+
+CREATE TABLE projects (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name            VARCHAR(150) NOT NULL,
+    code            VARCHAR(50) NOT NULL UNIQUE,
+    description     TEXT,
+    phase           project_phase NOT NULL DEFAULT 'OTHER',
+    location        VARCHAR(255),
+    start_date      DATE,
+    end_date        DATE,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at      TIMESTAMPTZ
+);
+
+CREATE TABLE user_projects (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id         UUID NOT NULL REFERENCES users(id),
+    project_id      UUID NOT NULL REFERENCES projects(id),
+    role            user_role NOT NULL,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (user_id, project_id)
+);
+
+CREATE TABLE vendors (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name            VARCHAR(150) NOT NULL,
+    contact_person  VARCHAR(150),
+    phone           VARCHAR(50),
+    email           VARCHAR(150),
+    address         TEXT,
+    is_active       BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE material_catalog (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    sku                 VARCHAR(100) NOT NULL UNIQUE,
+    name                VARCHAR(200) NOT NULL,
+    category            VARCHAR(100) NOT NULL,
+    unit_of_measure     VARCHAR(50) NOT NULL,
+    phase_hint          project_phase,
+    dynamic_attributes  JSONB, -- e.g. { "grade": "M20", "size": "16mm" }
+    is_active           BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE material_prices (
+    id              UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    material_id     UUID NOT NULL REFERENCES material_catalog(id),
+    vendor_id       UUID NOT NULL REFERENCES vendors(id),
+    project_id      UUID REFERENCES projects(id),
+    price_per_unit  NUMERIC(14,4) NOT NULL,
+    currency        VARCHAR(10) NOT NULL DEFAULT 'USD',
+    valid_from      DATE NOT NULL,
+    valid_to        DATE,
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (material_id, vendor_id, project_id, valid_from)
+);
+
+CREATE TABLE project_budgets (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id          UUID NOT NULL REFERENCES projects(id),
+    total_budget        NUMERIC(16,2) NOT NULL,
+    committed_amount    NUMERIC(16,2) NOT NULL DEFAULT 0,
+    spent_amount        NUMERIC(16,2) NOT NULL DEFAULT 0,
+    alert_threshold_pct NUMERIC(5,2) NOT NULL DEFAULT 80.00,
+    alert_level         budget_alert_level NOT NULL DEFAULT 'NONE',
+    currency            VARCHAR(10) NOT NULL DEFAULT 'USD',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    UNIQUE (project_id)
+);
+
+CREATE TABLE orders (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id          UUID NOT NULL REFERENCES projects(id),
+    created_by_id       UUID NOT NULL REFERENCES users(id),
+    requested_by_id     UUID REFERENCES users(id),
+    order_number        VARCHAR(50) NOT NULL UNIQUE,
+    status              order_status NOT NULL DEFAULT 'DRAFT',
+    required_date       DATE,
+    total_estimated     NUMERIC(16,2) NOT NULL DEFAULT 0,
+    total_received      NUMERIC(16,2) NOT NULL DEFAULT 0,
+    currency            VARCHAR(10) NOT NULL DEFAULT 'USD',
+    notes               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at          TIMESTAMPTZ
+);
+
+CREATE TABLE order_items (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id            UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    material_id         UUID NOT NULL REFERENCES material_catalog(id),
+    quantity            NUMERIC(14,3) NOT NULL,
+    unit_price          NUMERIC(14,4),
+    currency            VARCHAR(10) NOT NULL DEFAULT 'USD',
+    attributes          JSONB, -- e.g. { "color": "white", "finish": "matte" }
+    line_total          NUMERIC(16,2),
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE order_approvals (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id            UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+    approver_id         UUID NOT NULL REFERENCES users(id),
+    status              approval_status NOT NULL DEFAULT 'PENDING',
+    comment             TEXT,
+    decided_at          TIMESTAMPTZ,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE receipts (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    order_id            UUID NOT NULL REFERENCES orders(id),
+    project_id          UUID NOT NULL REFERENCES projects(id),
+    received_by_id      UUID NOT NULL REFERENCES users(id),
+    received_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    status              receipt_status NOT NULL DEFAULT 'PENDING',
+    delivery_note_no    VARCHAR(100),
+    barcode             VARCHAR(255), -- scanned delivery barcode
+    photo_url           TEXT, -- optional proof photo
+    notes               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE receipt_items (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    receipt_id          UUID NOT NULL REFERENCES receipts(id) ON DELETE CASCADE,
+    order_item_id       UUID NOT NULL REFERENCES order_items(id),
+    quantity_received   NUMERIC(14,3) NOT NULL,
+    condition_notes     TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE consumption_logs (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    project_id          UUID NOT NULL REFERENCES projects(id),
+    material_id         UUID NOT NULL REFERENCES material_catalog(id),
+    quantity_used       NUMERIC(14,3) NOT NULL,
+    used_at             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    recorded_by_id      UUID NOT NULL REFERENCES users(id),
+    notes               TEXT,
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE user_notifications (
+    id                  UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id             UUID NOT NULL REFERENCES users(id),
+    type                notification_type NOT NULL,
+    title               VARCHAR(200) NOT NULL,
+    message             TEXT NOT NULL,
+    data                JSONB,
+    status              notification_status NOT NULL DEFAULT 'UNREAD',
+    created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    read_at             TIMESTAMPTZ
+);
+
+-- ============ AUDIT LOGS ============
+
+CREATE TABLE audit_logs (
+    id              BIGSERIAL PRIMARY KEY,
+    table_name      VARCHAR(100) NOT NULL,
+    record_id       UUID,
+    action          audit_action NOT NULL,
+    changed_by_id   UUID REFERENCES users(id),
+    changed_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    changes         JSONB
+);
+
+-- Generic audit trigger function
+CREATE OR REPLACE FUNCTION audit_trigger_func()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_record_id UUID;
+    v_changes JSONB;
+BEGIN
+    IF (TG_OP = 'DELETE') THEN
+        v_record_id := OLD.id;
+        v_changes := to_jsonb(OLD);
+        INSERT INTO audit_logs(table_name, record_id, action, changed_by_id, changes)
+        VALUES (TG_TABLE_NAME, v_record_id, 'DELETE', current_setting('app.current_user_id', true)::uuid, v_changes);
+        RETURN OLD;
+    ELSIF (TG_OP = 'INSERT') THEN
+        v_record_id := NEW.id;
+        v_changes := to_jsonb(NEW);
+        INSERT INTO audit_logs(table_name, record_id, action, changed_by_id, changes)
+        VALUES (TG_TABLE_NAME, v_record_id, 'INSERT', current_setting('app.current_user_id', true)::uuid, v_changes);
+        RETURN NEW;
+    ELSE
+        v_record_id := NEW.id;
+        v_changes := jsonb_build_object(
+            'old', to_jsonb(OLD),
+            'new', to_jsonb(NEW)
+        );
+        INSERT INTO audit_logs(table_name, record_id, action, changed_by_id, changes)
+        VALUES (TG_TABLE_NAME, v_record_id, 'UPDATE', current_setting('app.current_user_id', true)::uuid, v_changes);
+        RETURN NEW;
+    END IF;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Attach audit triggers to critical tables
+DO $$
+DECLARE
+    t TEXT;
+BEGIN
+    FOR t IN SELECT unnest(ARRAY['users','projects','orders','order_items','receipts','project_budgets']) LOOP
+        EXECUTE format($f$
+            DROP TRIGGER IF EXISTS %1$s_audit_trg ON %1$s;
+            CREATE TRIGGER %1$s_audit_trg
+            AFTER INSERT OR UPDATE OR DELETE ON %1$s
+            FOR EACH ROW EXECUTE FUNCTION audit_trigger_func();
+        $f$, t);
+    END LOOP;
+END;
+$$;
+
+-- ============ INDEXES ============
+
+CREATE INDEX idx_users_role ON users(role);
+CREATE INDEX idx_projects_phase ON projects(phase);
+CREATE INDEX idx_user_projects_user ON user_projects(user_id);
+CREATE INDEX idx_user_projects_project ON user_projects(project_id);
+
+CREATE INDEX idx_material_catalog_category ON material_catalog(category);
+CREATE INDEX idx_material_catalog_phase_hint ON material_catalog(phase_hint);
+CREATE INDEX idx_material_catalog_dynattrs_gin ON material_catalog USING GIN (dynamic_attributes);
+
+CREATE INDEX idx_orders_project ON orders(project_id);
+CREATE INDEX idx_orders_status ON orders(status);
+CREATE INDEX idx_orders_created_by ON orders(created_by_id);
+
+CREATE INDEX idx_receipts_project ON receipts(project_id);
+CREATE INDEX idx_receipts_order ON receipts(order_id);
+CREATE INDEX idx_receipts_barcode ON receipts(barcode);
+
+CREATE INDEX idx_consumption_project ON consumption_logs(project_id);
+CREATE INDEX idx_notifications_user_status ON user_notifications(user_id, status);

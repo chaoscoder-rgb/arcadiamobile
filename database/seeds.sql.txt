@@ -1,0 +1,85 @@
+-- Users (passwords will be bcrypt-hashed in backend; here we store placeholder)
+INSERT INTO users (id, username, password_hash, full_name, role)
+VALUES
+    (uuid_generate_v4(), 'admin', '$2b$12$Pj5PT/AXo/hvVWrxnAqxfuarf/DjJiy2FqAYLfM/UYQytJGgQyWcy', 'System Administrator', 'ADMIN'),
+    (uuid_generate_v4(), 'engineer', '$2b$12$yU7TNtWJAjPWmLAIjDOnB.Hf/2yO4CwtV52hg7FNKvbd.IYCx6wZO', 'Site Engineer', 'SITE_ENGINEER'),
+    (uuid_generate_v4(), 'supervisor', '$2b$12$GxZ8vvQ5sxk0rG/gdt09Y.idTp4ijKdvq8W63..VZc2O7pN2N6uvC', 'Supervisor', 'SUPERVISOR'),
+    (uuid_generate_v4(), 'security', '$2b$12$kz2MxzclXpVhkodPWroPEONotS4.EEAjfNRoBumFwTwdTXcxB1/ge', 'Security Officer', 'SECURITY');
+
+-- Projects
+INSERT INTO projects (id, name, code, description, phase, location, start_date)
+VALUES
+    (uuid_generate_v4(), 'Project Alpha', 'PRJ-ALPHA', 'Foundation works', 'FOUNDATION', 'Site A', CURRENT_DATE),
+    (uuid_generate_v4(), 'Project Beta', 'PRJ-BETA', 'Framing works', 'FRAMING', 'Site B', CURRENT_DATE),
+    (uuid_generate_v4(), 'Project Gamma', 'PRJ-GAMMA', 'Finishing works', 'FINISHING', 'Site C', CURRENT_DATE);
+
+-- Simple budgets (will be adjusted by backend)
+INSERT INTO project_budgets (project_id, total_budget, committed_amount, spent_amount, alert_threshold_pct, currency)
+SELECT id, 100000, 0, 0, 80, 'USD' FROM projects;
+
+-- Vendors
+INSERT INTO vendors (id, name, contact_person, phone, email)
+VALUES
+    (uuid_generate_v4(), 'Alpha Materials Co.', 'John Doe', '+1-111-111-1111', 'sales@alphamaterials.com'),
+    (uuid_generate_v4(), 'BuildRight Suppliers', 'Jane Smith', '+1-222-222-2222', 'contact@buildright.com');
+
+-- Material catalog (30+ items across categories)
+
+-- Foundation
+INSERT INTO material_catalog (id, sku, name, category, unit_of_measure, phase_hint, dynamic_attributes)
+VALUES
+    (uuid_generate_v4(), 'FOUND-CEM-001', 'Cement OPC 43 Grade', 'Foundation', 'bag', 'FOUNDATION', '{"grade":"43","bag_weight_kg":50}'::jsonb),
+    (uuid_generate_v4(), 'FOUND-CEM-002', 'Cement OPC 53 Grade', 'Foundation', 'bag', 'FOUNDATION', '{"grade":"53","bag_weight_kg":50}'::jsonb),
+    (uuid_generate_v4(), 'FOUND-REB-016', 'Steel Rebar 16mm', 'Foundation', 'kg', 'FOUNDATION', '{"diameter_mm":16}'::jsonb),
+    (uuid_generate_v4(), 'FOUND-REB-012', 'Steel Rebar 12mm', 'Foundation', 'kg', 'FOUNDATION', '{"diameter_mm":12}'::jsonb),
+    (uuid_generate_v4(), 'FOUND-CON-001', 'Ready Mix Concrete M20', 'Foundation', 'm3', 'FOUNDATION', '{"grade":"M20"}'::jsonb),
+    (uuid_generate_v4(), 'FOUND-CON-002', 'Ready Mix Concrete M25', 'Foundation', 'm3', 'FOUNDATION', '{"grade":"M25"}'::jsonb);
+
+-- Electrical
+INSERT INTO material_catalog (id, sku, name, category, unit_of_measure, phase_hint, dynamic_attributes)
+VALUES
+    (uuid_generate_v4(), 'ELEC-WIRE-1.5', 'Copper Wire 1.5mm²', 'Electrical', 'meter', 'FRAMING', '{"conductor":"copper","insulation":"PVC"}'::jsonb),
+    (uuid_generate_v4(), 'ELEC-WIRE-2.5', 'Copper Wire 2.5mm²', 'Electrical', 'meter', 'FRAMING', '{"conductor":"copper","insulation":"PVC"}'::jsonb),
+    (uuid_generate_v4(), 'ELEC-COND-25', 'PVC Conduit 25mm', 'Electrical', 'meter', 'FRAMING', '{"diameter_mm":25}'::jsonb),
+    (uuid_generate_v4(), 'ELEC-COND-32', 'PVC Conduit 32mm', 'Electrical', 'meter', 'FRAMING', '{"diameter_mm":32}'::jsonb),
+    (uuid_generate_v4(), 'ELEC-SW-1G', 'Switch 1 Gang', 'Electrical', 'piece', 'FINISHING', '{"rating_A":10}'::jsonb),
+    (uuid_generate_v4(), 'ELEC-SW-2G', 'Switch 2 Gang', 'Electrical', 'piece', 'FINISHING', '{"rating_A":10}'::jsonb);
+
+-- Plumbing
+INSERT INTO material_catalog (id, sku, name, category, unit_of_measure, phase_hint, dynamic_attributes)
+VALUES
+    (uuid_generate_v4(), 'PLUMB-PVC-20', 'PVC Pipe 20mm', 'Plumbing', 'meter', 'FRAMING', '{"diameter_mm":20}'::jsonb),
+    (uuid_generate_v4(), 'PLUMB-PVC-25', 'PVC Pipe 25mm', 'Plumbing', 'meter', 'FRAMING', '{"diameter_mm":25}'::jsonb),
+    (uuid_generate_v4(), 'PLUMB-FIT-ELBOW-20', 'Elbow 20mm', 'Plumbing', 'piece', 'FRAMING', '{"angle_deg":90}'::jsonb),
+    (uuid_generate_v4(), 'PLUMB-FIT-ELBOW-25', 'Elbow 25mm', 'Plumbing', 'piece', 'FRAMING', '{"angle_deg":90}'::jsonb),
+    (uuid_generate_v4(), 'PLUMB-FIX-TAP', 'Bib Tap Chrome', 'Plumbing', 'piece', 'FINISHING', '{"finish":"chrome"}'::jsonb),
+    (uuid_generate_v4(), 'PLUMB-FIX-SHWR', 'Shower Set', 'Plumbing', 'set', 'FINISHING', '{"finish":"chrome"}'::jsonb);
+
+-- Finishing
+INSERT INTO material_catalog (id, sku, name, category, unit_of_measure, phase_hint, dynamic_attributes)
+VALUES
+    (uuid_generate_v4(), 'FIN-PNT-INT-WHT', 'Interior Paint White', 'Finishing', 'liter', 'FINISHING', '{"finish":"matte"}'::jsonb),
+    (uuid_generate_v4(), 'FIN-PNT-EXT-WHT', 'Exterior Paint White', 'Finishing', 'liter', 'FINISHING', '{"finish":"weatherproof"}'::jsonb),
+    (uuid_generate_v4(), 'FIN-TILE-FLOOR-60', 'Floor Tile 600x600', 'Finishing', 'm2', 'FINISHING', '{"size_mm":"600x600"}'::jsonb),
+    (uuid_generate_v4(), 'FIN-TILE-WALL-30', 'Wall Tile 300x600', 'Finishing', 'm2', 'FINISHING', '{"size_mm":"300x600"}'::jsonb),
+    (uuid_generate_v4(), 'FIN-SANITO-WC', 'Wall Hung WC', 'Finishing', 'piece', 'FINISHING', '{"type":"wall-hung"}'::jsonb),
+    (uuid_generate_v4(), 'FIN-SANITO-BASIN', 'Wash Basin', 'Finishing', 'piece', 'FINISHING', '{"type":"counter-top"}'::jsonb);
+
+-- Additional misc items to exceed 30
+INSERT INTO material_catalog (id, sku, name, category, unit_of_measure, phase_hint, dynamic_attributes)
+VALUES
+    (uuid_generate_v4(), 'MISC-NAIL-50', 'Nails 50mm', 'Misc', 'kg', 'FRAMING', '{}'::jsonb),
+    (uuid_generate_v4(), 'MISC-SCREW-25', 'Screws 25mm', 'Misc', 'kg', 'FRAMING', '{}'::jsonb),
+    (uuid_generate_v4(), 'MISC-PLY-18', 'Plywood 18mm', 'Misc', 'sheet', 'FRAMING', '{}'::jsonb),
+    (uuid_generate_v4(), 'MISC-PLY-12', 'Plywood 12mm', 'Misc', 'sheet', 'FRAMING', '{}'::jsonb),
+    (uuid_generate_v4(), 'MISC-ADHESIVE', 'Tile Adhesive', 'Misc', 'bag', 'FINISHING', '{}'::jsonb),
+    (uuid_generate_v4(), 'MISC-GROUT', 'Tile Grout', 'Misc', 'bag', 'FINISHING', '{}'::jsonb);
+
+-- Simple sample prices for a few materials (for testing budgeting)
+INSERT INTO material_prices (material_id, vendor_id, project_id, price_per_unit, currency, valid_from)
+SELECT mc.id, v.id, p.id, 10.0, 'USD', CURRENT_DATE
+FROM material_catalog mc
+CROSS JOIN LATERAL (SELECT id FROM vendors LIMIT 1) v
+CROSS JOIN LATERAL (SELECT id FROM projects LIMIT 1) p
+WHERE mc.category IN ('Foundation','Electrical')
+LIMIT 5;
