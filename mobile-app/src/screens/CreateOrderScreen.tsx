@@ -7,11 +7,16 @@ import {
   StyleSheet,
   Alert,
   ScrollView,
+  Platform,
+  TouchableOpacity,
 } from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/AppNavigator";
 import { api } from "../services/api";
 import { Picker } from "@react-native-picker/picker";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
 
 type Props = NativeStackScreenProps<RootStackParamList, "CreateOrder">;
 
@@ -34,11 +39,47 @@ function formatDate(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+const onChangeRequiredDate = (
+  event: DateTimePickerEvent,
+  selectedDate?: Date,
+) => {
+  if (event.type === "dismissed") {
+    setShowDatePicker(false);
+    return;
+  }
+
+  const currentDate = selectedDate || requiredDateObj || new Date();
+  setShowDatePicker(Platform.OS === "ios"); // keep open on iOS, close on Android
+  setRequiredDateObj(currentDate);
+  setRequiredDate(formatDate(currentDate));
+};
+
 const CreateOrderScreen: React.FC<Props> = ({ route, navigation }) => {
   const { projectId, projectName } = route.params;
 
   const [requiredDate, setRequiredDate] = useState("");
   const [notes, setNotes] = useState("");
+
+  const [requiredDateObj, setRequiredDateObj] = useState<Date | null>(null);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+
+  const onChangeRequiredDate = (
+  event: DateTimePickerEvent,
+  selectedDate?: Date,
+) => {
+  if (event.type === "dismissed") {
+    setShowDatePicker(false);
+    return;
+  }
+
+  const currentDate = selectedDate || requiredDateObj || new Date();
+  // Close on Android, keep open on iOS
+  if (Platform.OS !== "ios") {
+    setShowDatePicker(false);
+  }
+  setRequiredDateObj(currentDate);
+  setRequiredDate(formatDate(currentDate));
+};
 
   const [materialId, setMaterialId] = useState<string>("");
   const [quantity, setQuantity] = useState("");
@@ -50,6 +91,7 @@ const CreateOrderScreen: React.FC<Props> = ({ route, navigation }) => {
   useEffect(() => {
     const now = new Date();
     const oneWeekLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    setRequiredDateObj(oneWeekLater);
     setRequiredDate(formatDate(oneWeekLater));
   }, []);
 
@@ -131,18 +173,13 @@ const CreateOrderScreen: React.FC<Props> = ({ route, navigation }) => {
       {/* Material and pricing section first */}
       <Text style={styles.sectionTitle}>Item</Text>
 
-      <Text style={styles.label}>Material</Text>
-      <View style={styles.pickerContainer}>
-        <Picker
-          selectedValue={materialId}
-          onValueChange={(value) => setMaterialId(value)}
-        >
-          <Picker.Item label="Select material" value="" />
-          {MATERIAL_OPTIONS.map((m) => (
-            <Picker.Item key={m.id} label={m.label} value={m.id} />
-          ))}
-        </Picker>
-      </View>
+      <Text style={styles.label}>Material ID</Text>
+<TextInput
+  style={styles.input}
+  placeholder="Paste material UUID (from material_catalog.id)"
+  value={materialId}
+  onChangeText={setMaterialId}
+/>
 
       <Text style={styles.label}>Quantity</Text>
       <TextInput
@@ -170,13 +207,25 @@ const CreateOrderScreen: React.FC<Props> = ({ route, navigation }) => {
       </View>
 
       {/* Move required date and notes to the end */}
-      <Text style={styles.label}>Required Date</Text>
-      <TextInput
-        style={styles.input}
-        placeholder="YYYY-MM-DD"
-        value={requiredDate}
-        onChangeText={setRequiredDate}
-      />
+<Text style={styles.label}>Required Date</Text>
+<TouchableOpacity
+  style={styles.input}
+  onPress={() => setShowDatePicker(true)}
+>
+  <Text>
+    {requiredDate || "Select date"}
+  </Text>
+</TouchableOpacity>
+
+{showDatePicker && (
+  <DateTimePicker
+    value={requiredDateObj || new Date()}
+    mode="date"
+    display="default"
+    minimumDate={new Date()} // disables / greys out past dates
+    onChange={onChangeRequiredDate}
+  />
+)}
 
       <Text style={styles.label}>Notes (optional)</Text>
       <TextInput

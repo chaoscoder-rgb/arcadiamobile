@@ -8,6 +8,8 @@ export interface AuthRequest extends Request {
 
 export function requireAuth(req: AuthRequest, res: Response, next: NextFunction) {
   const header = req.headers.authorization;
+  console.log("AUTH HEADER:", header);
+
   if (!header || !header.startsWith("Bearer ")) {
     return fail(res, "Unauthorized", 401);
   }
@@ -36,3 +38,4 @@ export function requireRole(roles: string[]) {
     next();
   };
 }
+

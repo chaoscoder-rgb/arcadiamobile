@@ -75,7 +75,7 @@ const ProjectsScreen: React.FC<Props> = ({ navigation }) => {
   >
     <Text style={styles.name}>{item.name}</Text>
     <Text style={styles.meta}>
-      {item.code} • {item.phase}
+      Project {item.code} • {item.phase}
     </Text>
     <Text style={styles.link}>Tap to create order</Text>
   </TouchableOpacity>
